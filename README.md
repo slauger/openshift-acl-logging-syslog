@@ -93,7 +93,7 @@ Quick test policy to generate deny logs:
 oc create namespace netpol-test
 
 # Enable logging for this namespace
-oc annotate namespace netpol-test k8s.ovn.org/acl-logging='{"deny":"alert","allow":"alert"}'
+oc annotate namespace netpol-test k8s.ovn.org/acl-logging='{"deny":"debug","allow":"debug"}'
 
 # Apply deny-all policy
 cat <<EOF | oc apply -f -
@@ -116,7 +116,7 @@ oc run test-pod -n netpol-test --image=registry.access.redhat.com/ubi9/ubi-minim
 oc exec -n netpol-test test-pod -- curl -m 5 https://www.redhat.com || echo "Connection denied (expected)"
 
 # Check syslog for deny logs
-grep "namespace=netpol-test" /var/log/remote-hosts/*/syslog.log
+grep "netpol-test" /var/log/remote-hosts/*/syslog.log
 
 # Cleanup
 oc delete namespace netpol-test
