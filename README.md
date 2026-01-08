@@ -25,6 +25,8 @@ ss -tulnp | grep 514
 
 ## Enable Network Policy Logging in OpenShift
 
+### Cluster-wide Logging (all namespaces)
+
 ```bash
 # Configure ACL audit logging (replace <SYSLOG-IP> with your server)
 oc patch network.operator cluster --type=merge -p '{
@@ -44,6 +46,80 @@ oc patch network.operator cluster --type=merge -p '{
 
 # Verify configuration
 oc get network.operator cluster -o jsonpath='{.spec.defaultNetwork.ovnKubernetesConfig.policyAuditConfig}'
+```
+
+### Namespace-specific Logging
+
+To enable logging only for specific namespaces, add the `k8s.ovn.org/acl-logging` annotation:
+
+```bash
+# Enable logging for denied traffic in a namespace
+oc annotate namespace myapp k8s.ovn.org/acl-logging='{"deny":"alert","allow":"alert"}'
+
+# Only log denied traffic
+oc annotate namespace myapp k8s.ovn.org/acl-logging='{"deny":"alert"}'
+
+# Only log allowed traffic
+oc annotate namespace myapp k8s.ovn.org/acl-logging='{"allow":"alert"}'
+
+# Disable logging for a namespace
+oc annotate namespace myapp k8s.ovn.org/acl-logging-
+```
+
+**Log levels:**
+- `alert` - Log to syslog (required for external syslog server)
+- `notice` - Log only to OVN northbound database
+- `info` - Log to both syslog and database
+- `debug` - Verbose logging (use with caution)
+
+**Example: Debug specific application**
+```bash
+# 1. Enable namespace logging
+oc annotate namespace frontend k8s.ovn.org/acl-logging='{"deny":"alert","allow":"alert"}'
+
+# 2. Check logs on syslog server
+tail -f /var/log/remote-hosts/*/syslog.log | grep "namespace=frontend"
+
+# 3. Disable when done
+oc annotate namespace frontend k8s.ovn.org/acl-logging-
+```
+
+### Test Network Policy (Generate Logs)
+
+Quick test policy to generate deny logs:
+
+```bash
+# Create test namespace
+oc create namespace netpol-test
+
+# Enable logging for this namespace
+oc annotate namespace netpol-test k8s.ovn.org/acl-logging='{"deny":"alert","allow":"alert"}'
+
+# Apply deny-all policy
+cat <<EOF | oc apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: netpol-test
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+EOF
+
+# Create a test pod
+oc run test-pod -n netpol-test --image=registry.access.redhat.com/ubi9/ubi-minimal:latest --command -- sleep 3600
+
+# Try to generate traffic (will be denied)
+oc exec -n netpol-test test-pod -- curl -m 5 https://www.redhat.com || echo "Connection denied (expected)"
+
+# Check syslog for deny logs
+grep "namespace=netpol-test" /var/log/remote-hosts/*/syslog.log
+
+# Cleanup
+oc delete namespace netpol-test
 ```
 
 ## View Logs
