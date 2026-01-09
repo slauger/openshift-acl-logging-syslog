@@ -1,126 +1,126 @@
-# Syslog Server Installation auf RHEL8
+# Syslog Server Installation on RHEL8
 
-## Übersicht
-Diese Anleitung beschreibt die Installation und Konfiguration eines zentralen Syslog-Servers mit rsyslog auf RHEL8.
-Der Server empfängt Logs über UDP (Port 514) und TCP (Port 514) und speichert die Logs pro Client in separaten Dateien.
+## Overview
+This guide describes the installation and configuration of a central syslog server with rsyslog on RHEL8.
+The server receives logs via UDP (port 514) and TCP (port 514) and stores the logs per client in separate files.
 
-## Voraussetzungen
-- RHEL8 System mit Root-Rechten
-- Firewall-Zugriff für Port 514 (UDP und TCP)
+## Prerequisites
+- RHEL8 system with root privileges
+- Firewall access for port 514 (UDP and TCP)
 
 ## Installation
 
-### 1. rsyslog installieren/prüfen
-rsyslog ist normalerweise bereits auf RHEL8 installiert:
+### 1. Install/check rsyslog
+rsyslog is normally already installed on RHEL8:
 
 ```bash
-# Prüfen ob rsyslog installiert ist
+# Check if rsyslog is installed
 rpm -qa | grep rsyslog
 
-# Falls nicht installiert:
+# If not installed:
 dnf install rsyslog -y
 ```
 
-### 2. rsyslog Service aktivieren
+### 2. Enable rsyslog service
 ```bash
 systemctl enable rsyslog
 systemctl start rsyslog
 systemctl status rsyslog
 ```
 
-## Konfiguration
+## Configuration
 
-### 3. Backup der Original-Konfiguration erstellen
+### 3. Create backup of original configuration
 ```bash
 cp /etc/rsyslog.conf /etc/rsyslog.conf.backup
 ```
 
-### 4. rsyslog für Remote-Empfang konfigurieren
-Bearbeiten Sie `/etc/rsyslog.conf` oder erstellen Sie eine separate Konfigurationsdatei (empfohlen).
+### 4. Configure rsyslog for remote reception
+Edit `/etc/rsyslog.conf` or create a separate configuration file (recommended).
 
-Die Konfigurationsdatei liegt im Repository: `rsyslog-server.conf`
+The configuration file is in the repository: `rsyslog-server.conf`
 
-Kopieren Sie diese nach:
+Copy it to:
 ```bash
 cp rsyslog-server.conf /etc/rsyslog.d/10-remote-server.conf
 ```
 
-### 5. Log-Verzeichnis erstellen
+### 5. Create log directory
 ```bash
 mkdir -p /var/log/remote-hosts
 chmod 755 /var/log/remote-hosts
 ```
 
-### 6. rsyslog neu starten
+### 6. Restart rsyslog
 ```bash
 systemctl restart rsyslog
 systemctl status rsyslog
 ```
 
-### 7. Firewall konfigurieren
+### 7. Configure firewall
 ```bash
-# UDP Port 514 öffnen
+# Open UDP port 514
 firewall-cmd --permanent --add-port=514/udp
 
-# TCP Port 514 öffnen
+# Open TCP port 514
 firewall-cmd --permanent --add-port=514/tcp
 
-# Firewall neu laden
+# Reload firewall
 firewall-cmd --reload
 
-# Prüfen
+# Verify
 firewall-cmd --list-all
 ```
 
-### 8. SELinux konfigurieren (falls aktiviert)
+### 8. Configure SELinux (if enabled)
 ```bash
-# SELinux Kontext für Log-Verzeichnis setzen
+# Set SELinux context for log directory
 semanage fcontext -a -t var_log_t "/var/log/remote-hosts(/.*)?"
 restorecon -R /var/log/remote-hosts
 
-# Erlaube rsyslog auf Port 514 zu lauschen (falls nötig)
+# Allow rsyslog to listen on port 514 (if necessary)
 semanage port -a -t syslogd_port_t -p udp 514
 semanage port -a -t syslogd_port_t -p tcp 514
 ```
 
-## Testen
+## Testing
 
-### 9. Lokaler Test
+### 9. Local test
 ```bash
-# Test mit logger (UDP)
+# Test with logger (UDP)
 logger -n 127.0.0.1 -P 514 "Test message from localhost"
 
-# Prüfen ob Log-Datei erstellt wurde
+# Check if log file was created
 ls -la /var/log/remote-hosts/
 cat /var/log/remote-hosts/127.0.0.1/syslog.log
 ```
 
-### 10. Remote Test von einem Client
-Auf dem Client (z.B. einem anderen Linux-System):
+### 10. Remote test from a client
+On the client (e.g., another Linux system):
 ```bash
-# UDP Test
+# UDP test
 logger -n <SYSLOG-SERVER-IP> -P 514 "Test message via UDP"
 
-# TCP Test
+# TCP test
 logger -n <SYSLOG-SERVER-IP> -P 514 -T "Test message via TCP"
 ```
 
-## Überwachung und Wartung
+## Monitoring and Maintenance
 
-### Logs prüfen
+### Check logs
 ```bash
-# rsyslog Status
+# rsyslog status
 systemctl status rsyslog
 
-# rsyslog Logs prüfen
+# Check rsyslog logs
 journalctl -u rsyslog -f
 
-# Empfangene Remote-Logs prüfen
+# Check received remote logs
 ls -lR /var/log/remote-hosts/
 ```
 
-### Log-Rotation einrichten
-Erstellen Sie `/etc/logrotate.d/remote-hosts`:
+### Set up log rotation
+Create `/etc/logrotate.d/remote-hosts`:
 ```
 /var/log/remote-hosts/*/*.log {
     daily
@@ -139,44 +139,44 @@ Erstellen Sie `/etc/logrotate.d/remote-hosts`:
 
 ## Troubleshooting
 
-### Ports prüfen
+### Check ports
 ```bash
-# Prüfen ob rsyslog auf Port 514 lauscht
+# Check if rsyslog is listening on port 514
 ss -tulnp | grep 514
 netstat -tulnp | grep 514
 ```
 
-### Logs kommen nicht an
-1. Firewall prüfen: `firewall-cmd --list-all`
-2. rsyslog Status: `systemctl status rsyslog`
+### Logs are not arriving
+1. Check firewall: `firewall-cmd --list-all`
+2. rsyslog status: `systemctl status rsyslog`
 3. SELinux: `ausearch -m avc -ts recent`
-4. rsyslog Debug-Modus: `rsyslogd -N1` (Syntax-Check)
-5. Netzwerk-Verbindung: `tcpdump -i any port 514`
+4. rsyslog debug mode: `rsyslogd -N1` (syntax check)
+5. Network connection: `tcpdump -i any port 514`
 
-### Client-Konfiguration
-Die meisten Linux-Systeme können mit rsyslog oder syslog-ng Logs weiterleiten:
+### Client configuration
+Most Linux systems can forward logs with rsyslog or syslog-ng:
 
-In `/etc/rsyslog.conf` auf dem Client:
+In `/etc/rsyslog.conf` on the client:
 ```
-# Alle Logs an zentralen Server senden (UDP)
+# Send all logs to central server (UDP)
 *.* @<SYSLOG-SERVER-IP>:514
 
-# Oder via TCP (empfohlen)
+# Or via TCP (recommended)
 *.* @@<SYSLOG-SERVER-IP>:514
 ```
 
-Dann Client rsyslog neu starten:
+Then restart client rsyslog:
 ```bash
 systemctl restart rsyslog
 ```
 
-## Sicherheitshinweise
-- Erwägen Sie TLS-Verschlüsselung für TCP (rsyslog unterstützt TLS)
-- Beschränken Sie Firewall-Zugriff auf bekannte Client-IPs
-- Überwachen Sie Disk-Space für `/var/log/remote-hosts/`
-- Implementieren Sie regelmäßige Log-Rotation
+## Security Notes
+- Consider TLS encryption for TCP (rsyslog supports TLS)
+- Restrict firewall access to known client IPs
+- Monitor disk space for `/var/log/remote-hosts/`
+- Implement regular log rotation
 
 ## Support
-Bei Problemen prüfen Sie:
-- Red Hat Enterprise Linux 8 Dokumentation
-- rsyslog Dokumentation: https://www.rsyslog.com/doc/
+For issues, check:
+- Red Hat Enterprise Linux 8 Documentation
+- rsyslog Documentation: https://www.rsyslog.com/doc/
